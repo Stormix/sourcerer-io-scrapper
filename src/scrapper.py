@@ -37,12 +37,16 @@ class Sourcerer:
     selectors = {
         'name': '#summary-section > div > div.profile-narrowed > div > div.section-header > div.caption > div > div.main > h1',
         'username': '#summary-section > div > div.profile-narrowed > div > div.section-header > div.caption > div > div.nick > h2',
+        'job': '#summary-section > div > div.profile-narrowed > div > div.section-header > div.right-side > div > div > div:nth-child(4)',
+        'site': '#summary-section > div > div.profile-narrowed > div > div.section-header > div.right-side > div > div > div:nth-child(6) > a',
+        'location': '#summary-section > div > div.profile-narrowed > div > div.section-header > div.right-side > div > div > div:nth-child(8)',
         'commits': '#summary-section > div > div.profile-narrowed > div > div.stats > div.plates-but-avatar > div:nth-child(1) > div.stat-number',
         'loc': '#summary-section > div > div.profile-narrowed > div > div.stats > div.plates-but-avatar > div:nth-child(3) > div.stat-number',
         'overview_technologies': '#awesome-chart-section > div > div > div > div.layout > div.chart > div.legend-area > div > div',
-        # 'chart': '#awesome-chart-section > div > div > div > div.layout > div.chart > div.chart-area > div > div > div.tooltips',
+        'chart': '#awesome-chart-section > div > div > div > div.layout > div.chart > div.chart-area > div > div > div.tooltips',
         'updated_at': '#awesome-chart-section > div > div > div > div.layout > div.section-header > div.repos > div.widget.reposummary > div:nth-child(2)',
         'technologies': '#tech-section > div > div > div > div.layout > div.techs',
+        'fun_facts': '#fun-facts-section > div > div > div > div.layout > div.fun-facts-list'
     }
 
     def __init__(self, username="stormiix"):
@@ -52,7 +56,7 @@ class Sourcerer:
         self.browser.get(link)
         time.sleep(self.delay)
 
-    def launchBrowser(self, headless=False):
+    def launchBrowser(self, headless=True):
         # Initiate the self.browser webdriver
         currentfolder = os.path.dirname(os.path.abspath(inspect.stack()[0][1]))
         options = webdriver.ChromeOptions()
@@ -73,7 +77,7 @@ class Sourcerer:
             options.add_argument('window-size=1280,800')
             options.add_argument('disable-gpu')
             options.add_argument('allow-insecure-localhost')
-        self.browser = webdriver.Chrome(options=options)
+        self.browser = webdriver.Chrome(chrome_options=options)
         self.browser.get(self.url)
         print("Browser Initiated !")
         print("Loading .. " + self.url, end=' ')
@@ -81,7 +85,6 @@ class Sourcerer:
         print('[DONE]')
 
     def fillInfo(self):
-        self.launchBrowser()
         for k, v in self.selectors.items():
             if 'chart' in k:
                 self.data[k] = {
@@ -93,8 +96,41 @@ class Sourcerer:
                     v).split(': ')[1], '%Y/%m/%d — %H:%M:%S')
             elif k == 'technologies':
                 self.data[k] = self.parseTechnologies(v)
+            elif k == 'fun_facts':
+                self.data[k] = self.parseFunFacts(v)
             else:
                 self.data[k] = self.getElementsText(v)
+
+    def parseFunFacts(self, selector):
+        try:
+            # Parse all
+            parent = self.browser.find_element_by_css_selector(selector)
+            cards = parent.find_elements_by_css_selector(
+                '.fun-facts-item-edit')
+            facts = []
+            for card in cards:
+                soup = BeautifulSoup(card.get_attribute(
+                    'innerHTML'), 'html.parser')
+
+                factElt = soup.find(
+                    "div", {"class": "fun-facts-item__header"})
+                statElt = soup.find(
+                    "div", {"class": "fun-facts-item__footer"})
+
+                fact = '' if not factElt else factElt.get_text().strip()
+                stat = '' if not statElt else statElt.get_text().strip()
+
+                fact = [line.strip() for line in fact.split('\n')]
+                stat = [line.strip() for line in stat.split('\n')]
+                facts.append({
+                    "fact": fact,
+                    "stat": stat
+                })
+            return facts
+        except NoSuchElementException as e:
+            print("Failed to getText(): NoSuchElement")
+        except ElementNotVisibleException as e:
+            print("Failed to getText(): ElementNotVisible")
 
     def parseTechnologies(self, selector):
         try:
@@ -126,6 +162,7 @@ class Sourcerer:
                     'commits': commits,
                     'libraries': libraries
                 })
+            return technologies
         except NoSuchElementException as e:
             print("Failed to getText(): NoSuchElement")
         except ElementNotVisibleException as e:
@@ -169,12 +206,3 @@ class Sourcerer:
             print("Failed to getText(): NoSuchElement")
         except ElementNotVisibleException as e:
             print("Failed to getText(): ElementNotVisible")
-
-    def getInfo(self):
-        return self.browser.find_element_by_css_selector(self.selectors['profile']['name'])
-
-
-if __name__ == "__main__":
-    test = Sourcerer()
-    test.launchBrowser(headless=True)
-    test.fillInfo()
